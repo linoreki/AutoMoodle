@@ -72,3 +72,4 @@ echo "URL para continuar con la instalación desde el navegador:"
 echo "http://<TU_IP>/moodle"
 
 exit 0
+# 33
