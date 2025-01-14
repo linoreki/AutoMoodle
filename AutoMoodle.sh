@@ -22,9 +22,14 @@ echo ""
 
 # Instalar paquetes necesarios
 echo "=== Instalando dependencias necesarias ==="
+
 apt update && apt install -y nginx php$PHP_VERSION-fpm php$PHP_VERSION-cli \
 php$PHP_VERSION-curl php$PHP_VERSION-xml php$PHP_VERSION-mbstring \
-php$PHP_VERSION-zip php$PHP_VERSION-mysql mariadb-server git unzip
+php$PHP_VERSION-zip php$PHP_VERSION-mysql mysql git unzip apache2
+systemctl enable apache2
+systemctl enable mysql
+systemctl start mysql
+systemctl start apache2
 
 # Configuración de la base de datos
 echo "=== Configurando la base de datos ==="
