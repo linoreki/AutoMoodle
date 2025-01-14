@@ -25,7 +25,7 @@ echo "=== Instalando dependencias necesarias ==="
 
 apt update && apt install -y nginx php$PHP_VERSION-fpm php$PHP_VERSION-cli \
 php$PHP_VERSION-curl php$PHP_VERSION-xml php$PHP_VERSION-mbstring \
-php$PHP_VERSION-zip php$PHP_VERSION-mysql mysql git unzip apache2
+php$PHP_VERSION-zip php$PHP_VERSION-mysql mysql-server git unzip apache2
 systemctl enable apache2
 systemctl enable mysql
 systemctl start mysql
