@@ -16,7 +16,9 @@ MOODLE_PATH=${MOODLE_PATH:-/var/www/moodle}
 read -p "Puerto en el que hostear Moodle (por defecto: 80): " HOST_PORT
 HOST_PORT=${HOST_PORT:-80}
 
-read -p "Versión de PHP requerida (ejemplo: 8.1): " PHP_VERSION
+read -p "Versión de PHP requerida (por defecto: 8.1): " PHP_VERSION
+PHP_VERSION=${PHP_VERSION:-8.1}
+
 read -p "Base de datos a usar (mariadb/mysql/postgres): " DB_TYPE
 read -p "Nombre de la base de datos para Moodle: " DB_NAME
 read -p "Usuario de la base de datos: " DB_USER
@@ -33,6 +35,12 @@ systemctl enable apache2
 systemctl enable mysql
 systemctl start mysql
 systemctl start apache2
+
+# Configuración del puerto en Apache
+if [ "$HOST_PORT" -ne 80 ]; then
+  echo "=== Configurando Apache para escuchar en el puerto $HOST_PORT ==="
+  echo "Listen $HOST_PORT" >> /etc/apache2/ports.conf
+fi
 
 # Configuración de la base de datos
 echo "=== Configurando la base de datos ==="
