@@ -13,6 +13,9 @@ read -p "Dominio o IP del servidor (ejemplo: moodle.example.com): " MOODLE_DOMAI
 read -p "Ruta de instalación para Moodle (por defecto: /var/www/moodle): " MOODLE_PATH
 MOODLE_PATH=${MOODLE_PATH:-/var/www/moodle}
 
+read -p "Puerto en el que hostear Moodle (por defecto: 80): " HOST_PORT
+HOST_PORT=${HOST_PORT:-80}
+
 read -p "Versión de PHP requerida (ejemplo: 8.1): " PHP_VERSION
 read -p "Base de datos a usar (mariadb/mysql/postgres): " DB_TYPE
 read -p "Nombre de la base de datos para Moodle: " DB_NAME
@@ -23,8 +26,8 @@ echo ""
 # Instalar paquetes necesarios
 echo "=== Instalando dependencias necesarias ==="
 
-apt update && apt install -y nginx php$PHP_VERSION-fpm php$PHP_VERSION-cli \
-php$PHP_VERSION-curl php$PHP_VERSION-xml php$PHP_VERSION-mbstring \
+apt update && apt install -y php$PHP_VERSION libapache2-mod-php$PHP_VERSION \
+php$PHP_VERSION-cli php$PHP_VERSION-curl php$PHP_VERSION-xml php$PHP_VERSION-mbstring \
 php$PHP_VERSION-zip php$PHP_VERSION-mysql mysql-server git unzip apache2
 systemctl enable apache2
 systemctl enable mysql
@@ -67,45 +70,45 @@ mkdir -p $MOODLEDATA_PATH
 chown -R www-data:www-data $MOODLEDATA_PATH
 chmod -R 755 $MOODLEDATA_PATH
 
-# Configurar NGINX
-echo "=== Configurando NGINX ==="
-cat > /etc/nginx/sites-available/moodle <<EOL
-server {
-    listen 80;
-    server_name $MOODLE_DOMAIN;
+# Configurar Apache2
+echo "=== Configurando Apache2 ==="
+cat > /etc/apache2/sites-available/moodle.conf <<EOL
+<VirtualHost *:$HOST_PORT>
+    ServerName $MOODLE_DOMAIN
 
-    root $MOODLE_PATH;
-    index index.php;
+    DocumentRoot $MOODLE_PATH
+    <Directory $MOODLE_PATH>
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
 
-    location / {
-        try_files \$uri /index.php;
-    }
+    ErrorLog \${APACHE_LOG_DIR}/moodle_error.log
+    CustomLog \${APACHE_LOG_DIR}/moodle_access.log combined
 
-    location ~ \.php\$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/var/run/php/php$PHP_VERSION-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        include fastcgi_params;
-    }
-
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|otf|eot|ttc|txt|xml|pdf|doc|xls|ppt|zip|tar|tgz|gz|rar|bz2|7z|mp3|ogg|mp4|m4v|webm|ogg|ogv|ico|svg)\$ {
-        try_files \$uri /index.php;
-        expires max;
-        access_log off;
-    }
-}
+    <Directory $MOODLEDATA_PATH>
+        Require all denied
+    </Directory>
+</VirtualHost>
 EOL
 
-ln -s /etc/nginx/sites-available/moodle /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
+a2ensite moodle.conf
+a2enmod rewrite
+systemctl reload apache2
 
 # Configurar Moodle
 echo "=== Configurando Moodle ==="
-php $MOODLE_PATH/admin/cli/install.php --wwwroot="http://$MOODLE_DOMAIN" \
+php $MOODLE_PATH/admin/cli/install.php --wwwroot="http://$MOODLE_DOMAIN:$HOST_PORT" \
     --dataroot=$MOODLEDATA_PATH --dbtype=$DB_TYPE --dbname=$DB_NAME \
     --dbuser=$DB_USER --dbpass=$DB_PASSWORD --fullname="Moodle Site" \
     --shortname="Moodle" --adminuser=admin --adminpass=Admin123! \
     --agree-license --non-interactive
 
+# Imprimir configuración final
 echo "=== Moodle instalado exitosamente ==="
-echo "Accede a tu sitio en: http://$MOODLE_DOMAIN"
+echo "Accede a tu sitio en: http://$MOODLE_DOMAIN:$HOST_PORT"
+echo "Configuración de la base de datos:"
+echo "Tipo de base de datos: $DB_TYPE"
+echo "Nombre de la base de datos: $DB_NAME"
+echo "Usuario de la base de datos: $DB_USER"
+echo "Contraseña de la base de datos: $DB_PASSWORD (protegida)"
