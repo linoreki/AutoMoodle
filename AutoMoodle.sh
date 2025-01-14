@@ -50,6 +50,18 @@ if [ "$HOST_PORT" -ne 80 ]; then
   echo "=== Configurando Apache para escuchar en el puerto $HOST_PORT ==="
   echo "Listen $HOST_PORT" >> /etc/apache2/ports.conf
 fi
+# Incrementar max_input_vars
+echo "=== Configurando max_input_vars ==="
+sed -i 's/^max_input_vars.*/max_input_vars = 5000/' /etc/php/$PHP_VERSION/apache2/php.ini
+
+# Asegurar que el límite de memoria es adecuado
+echo "=== Configurando memory_limit ==="
+sed -i 's/^memory_limit.*/memory_limit = 128M/' /etc/php/$PHP_VERSION/apache2/php.ini
+
+# Asegurar opcache habilitado
+echo "=== Configurando OPcache ==="
+echo "opcache.enable=1" >> /etc/php/$PHP_VERSION/apache2/php.ini
+echo "opcache.enable_cli=1" >> /etc/php/$PHP_VERSION/apache2/php.ini
 
 # Configuración de la base de datos
 echo "=== Configurando la base de datos ==="
