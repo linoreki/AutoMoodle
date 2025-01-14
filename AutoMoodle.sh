@@ -53,7 +53,14 @@ fi
 # Incrementar max_input_vars
 echo "=== Configurando max_input_vars ==="
 sed -i 's/^max_input_vars.*/max_input_vars = 5000/' /etc/php/$PHP_VERSION/apache2/php.ini
+for ini_file in $(find /etc/php/ -name "php.ini"); do
+    sed -i 's/^max_input_vars.*/max_input_vars = 5000/' $ini_file
+    grep -qxF "max_input_vars = 5000" $ini_file || echo "max_input_vars = 5000" >> $ini_file
+done
 
+# Reiniciar los servicios
+systemctl restart apache2
+systemctl restart php${PHP_VERSION}-fpm 2>/dev/null || true
 # Asegurar que el límite de memoria es adecuado
 echo "=== Configurando memory_limit ==="
 sed -i 's/^memory_limit.*/memory_limit = 128M/' /etc/php/$PHP_VERSION/apache2/php.ini
