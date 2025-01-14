@@ -1,75 +1,106 @@
 #!/bin/bash
 
-# Verificar si el script se ejecuta como root
+# Comprobación de permisos
 if [ "$EUID" -ne 0 ]; then
-  echo "Por favor, ejecuta este script como root."
-  exit
+  echo "Por favor, ejecuta el script como usuario root."
+  exit 1
 fi
 
-echo "=== Instalación de Moodle ==="
+echo "=== Instalación Automática de Moodle ==="
 
-# Solicitar el nombre de usuario y la contraseña de la base de datos
-read -p "Introduce el nombre de usuario de la base de datos: " db_user
-read -sp "Introduce la contraseña de la base de datos: " db_password
-echo
+# Solicitar información del usuario
+read -p "Dominio o IP del servidor (ejemplo: moodle.example.com): " MOODLE_DOMAIN
+read -p "Ruta de instalación para Moodle (por defecto: /var/www/moodle): " MOODLE_PATH
+MOODLE_PATH=${MOODLE_PATH:-/var/www/moodle}
 
-# Actualizar el sistema
-echo "Actualizando el sistema..."
-apt update && apt upgrade -y
+read -p "Versión de PHP requerida (ejemplo: 8.1): " PHP_VERSION
+read -p "Base de datos a usar (mariadb/mysql/postgres): " DB_TYPE
+read -p "Nombre de la base de datos para Moodle: " DB_NAME
+read -p "Usuario de la base de datos: " DB_USER
+read -s -p "Contraseña del usuario de la base de datos: " DB_PASSWORD
+echo ""
 
-# Agregar repositorio para PHP 7.4
-echo "Agregando repositorio para PHP 7.4..."
-add-apt-repository ppa:ondrej/php -y
-apt update
+# Instalar paquetes necesarios
+echo "=== Instalando dependencias necesarias ==="
+apt update && apt install -y nginx php$PHP_VERSION-fpm php$PHP_VERSION-cli \
+php$PHP_VERSION-curl php$PHP_VERSION-xml php$PHP_VERSION-mbstring \
+php$PHP_VERSION-zip php$PHP_VERSION-mysql mariadb-server git unzip
 
-# Instalar Apache, PHP 7.4 y las extensiones necesarias
-echo "Instalando Apache, PHP 7.4 y extensiones..."
-apt install -y apache2 mysql-server php7.4 php7.4-cli php7.4-fpm php7.4-mysql php7.4-xml \
-php7.4-xmlrpc php7.4-soap php7.4-intl php7.4-zip php7.4-mbstring php7.4-curl php7.4-gd unzip
-
-# Configurar Apache para usar PHP 7.4
-echo "Configurando Apache para usar PHP 7.4..."
-a2dismod php8.3 > /dev/null 2>&1 || true
-a2enmod php7.4
-systemctl restart apache2
+# Configuración de la base de datos
+echo "=== Configurando la base de datos ==="
+if [[ "$DB_TYPE" == "mariadb" || "$DB_TYPE" == "mysql" ]]; then
+  mysql -u root <<MYSQL_SCRIPT
+CREATE DATABASE $DB_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
+GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';
+FLUSH PRIVILEGES;
+MYSQL_SCRIPT
+elif [[ "$DB_TYPE" == "postgres" ]]; then
+  apt install -y postgresql postgresql-contrib
+  sudo -u postgres psql <<POSTGRES_SCRIPT
+CREATE DATABASE $DB_NAME;
+CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';
+GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
+POSTGRES_SCRIPT
+else
+  echo "Base de datos no soportada: $DB_TYPE"
+  exit 1
+fi
 
 # Descargar Moodle
-echo "Descargando Moodle..."
-wget -q https://download.moodle.org/stable40/moodle-latest-40.tgz -O /tmp/moodle.tgz
+echo "=== Descargando Moodle ==="
+git clone --branch MOODLE_401_STABLE git://git.moodle.org/moodle.git $MOODLE_PATH
 
-# Extraer Moodle
-echo "Instalando Moodle en /var/www/html/moodle..."
-tar -xzf /tmp/moodle.tgz -C /var/www/html
-mkdir /var/www/html/moodledata
-chown -R www-data:www-data /var/www/html/moodle /var/www/html/moodledata
-chmod -R 755 /var/www/html/moodle /var/www/html/moodledata
+# Configurar permisos
+echo "=== Configurando permisos ==="
+chown -R www-data:www-data $MOODLE_PATH
+chmod -R 755 $MOODLE_PATH
 
-# Configurar base de datos para Moodle
-echo "Configurando la base de datos..."
-mysql -u root <<EOF
-CREATE DATABASE moodle DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER '${db_user}'@'localhost' IDENTIFIED BY '${db_password}';
-GRANT ALL PRIVILEGES ON moodle.* TO '${db_user}'@'localhost';
-FLUSH PRIVILEGES;
-EOF
+# Crear directorio de datos
+MOODLEDATA_PATH="/var/moodledata"
+mkdir -p $MOODLEDATA_PATH
+chown -R www-data:www-data $MOODLEDATA_PATH
+chmod -R 755 $MOODLEDATA_PATH
 
-# Ajustar configuración de PHP
-echo "Ajustando configuración de PHP..."
-sed -i "s/^max_execution_time = .*/max_execution_time = 300/" /etc/php/7.4/apache2/php.ini
-sed -i "s/^memory_limit = .*/memory_limit = 128M/" /etc/php/7.4/apache2/php.ini
-sed -i "s/^post_max_size = .*/post_max_size = 64M/" /etc/php/7.4/apache2/php.ini
-sed -i "s/^upload_max_filesize = .*/upload_max_filesize = 64M/" /etc/php/7.4/apache2/php.ini
-systemctl restart apache2
+# Configurar NGINX
+echo "=== Configurando NGINX ==="
+cat > /etc/nginx/sites-available/moodle <<EOL
+server {
+    listen 80;
+    server_name $MOODLE_DOMAIN;
 
-# Información final
-clear
-echo "=== Instalación completa ==="
-echo "Moodle ha sido instalado correctamente."
-echo "Información de la base de datos:"
-echo "Usuario de la base de datos: $db_user"
-echo "Contraseña de la base de datos: $db_password"
-echo "URL para continuar con la instalación desde el navegador:"
-echo "http://<TU_IP>/moodle"
+    root $MOODLE_PATH;
+    index index.php;
 
-exit 0
-# 33
+    location / {
+        try_files \$uri /index.php;
+    }
+
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php$PHP_VERSION-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|otf|eot|ttc|txt|xml|pdf|doc|xls|ppt|zip|tar|tgz|gz|rar|bz2|7z|mp3|ogg|mp4|m4v|webm|ogg|ogv|ico|svg)\$ {
+        try_files \$uri /index.php;
+        expires max;
+        access_log off;
+    }
+}
+EOL
+
+ln -s /etc/nginx/sites-available/moodle /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+
+# Configurar Moodle
+echo "=== Configurando Moodle ==="
+php $MOODLE_PATH/admin/cli/install.php --wwwroot="http://$MOODLE_DOMAIN" \
+    --dataroot=$MOODLEDATA_PATH --dbtype=$DB_TYPE --dbname=$DB_NAME \
+    --dbuser=$DB_USER --dbpass=$DB_PASSWORD --fullname="Moodle Site" \
+    --shortname="Moodle" --adminuser=admin --adminpass=Admin123! \
+    --agree-license --non-interactive
+
+echo "=== Moodle instalado exitosamente ==="
+echo "Accede a tu sitio en: http://$MOODLE_DOMAIN"
