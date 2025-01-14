@@ -8,6 +8,13 @@ fi
 
 echo "=== Instalación Automática de Moodle ==="
 
+# Agregar repositorio PHP moderno si es necesario
+echo "=== Configurando repositorio de PHP ==="
+apt update
+apt install -y software-properties-common
+add-apt-repository ppa:ondrej/php -y
+apt update
+
 # Solicitar información del usuario
 read -p "Dominio o IP del servidor (ejemplo: moodle.example.com): " MOODLE_DOMAIN
 read -p "Ruta de instalación para Moodle (por defecto: /var/www/moodle): " MOODLE_PATH
@@ -25,16 +32,18 @@ read -p "Usuario de la base de datos: " DB_USER
 read -s -p "Contraseña del usuario de la base de datos: " DB_PASSWORD
 echo ""
 
-# Instalar paquetes necesarios
+# Instalar dependencias necesarias
 echo "=== Instalando dependencias necesarias ==="
 
-apt update && apt install -y php$PHP_VERSION libapache2-mod-php$PHP_VERSION \
-php$PHP_VERSION-cli php$PHP_VERSION-curl php$PHP_VERSION-xml php$PHP_VERSION-mbstring \
-php$PHP_VERSION-zip php$PHP_VERSION-mysql mysql-server git unzip apache2
+apt install -y php$PHP_VERSION libapache2-mod-php$PHP_VERSION \
+php$PHP_VERSION-cli php$PHP_VERSION-curl php$PHP_VERSION-xml \
+php$PHP_VERSION-mbstring php$PHP_VERSION-zip php$PHP_VERSION-mysql \
+mysql-server apache2 git unzip
+
 systemctl enable apache2
 systemctl enable mysql
-systemctl start mysql
 systemctl start apache2
+systemctl start mysql
 
 # Configuración del puerto en Apache
 if [ "$HOST_PORT" -ne 80 ]; then
