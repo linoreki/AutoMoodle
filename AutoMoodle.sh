@@ -82,7 +82,7 @@ chown -R www-data:www-data $MOODLE_PATH
 chmod -R 755 $MOODLE_PATH
 
 # Crear directorio de datos
-MOODLEDATA_PATH="/var/moodledata"
+MOODLEDATA_PATH="/var/www/moodledata"
 mkdir -p $MOODLEDATA_PATH
 chown -R www-data:www-data $MOODLEDATA_PATH
 chmod -R 755 $MOODLEDATA_PATH
